@@ -38,13 +38,3 @@ $ make run
 Notice: $ID is from [1-9]
 
 ### Grading
-
-```bash
-# setup build&run environment first
-$ git clone https://github.com/LearningOS/rCore-Tutorial-Code-2023S.git
-$ cd rCore-Tutorial-Code-2023S
-$ git clone https://github.com/LearningOS/rCore-Tutorial-Checker-2023S.git ci-user
-$ git clone https://github.com/LearningOS/rCore-Tutorial-Test-2023S.git ci-user/user
-$ cd ci-user && make test CHAPTER=$ID
-```
-Notice: $ID is from [3,4,5,6,8]

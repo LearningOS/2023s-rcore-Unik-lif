@@ -20,6 +20,7 @@ pub struct TimeVal {
 
 /// Task information
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
     status: TaskStatus,
@@ -96,3 +97,18 @@ pub fn sys_sbrk(size: i32) -> isize {
         -1
     }
 }
+/*
+pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+    let status: TaskStatus = pass_task_status();
+    let sys_info: SyscallInfo = pass_syscall_info();
+    if status != TaskStatus::Running {
+        return -1;
+    }
+    unsafe {
+        (*_ti).status = TaskStatus::Running;
+        (*_ti).syscall_times = sys_info.syscall_times;
+        (*_ti).time = get_time_ms() - sys_info.time;
+    }
+    0
+}
+*/

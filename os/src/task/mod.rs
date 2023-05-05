@@ -80,6 +80,9 @@ impl TaskManager {
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
+        if inner.tasks[0].taskinfo.time == 0 {
+            inner.tasks[0].taskinfo.time = get_time_ms();
+        }
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
@@ -141,6 +144,9 @@ impl TaskManager {
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
+            if inner.tasks[next].taskinfo.time == 0 {
+                inner.tasks[next].taskinfo.time = get_time_ms();
+            }
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
@@ -152,6 +158,28 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    /// accumulate syscall_times due to sycall number i.
+    /// Will be called in src/syscall/process.rs
+    fn add_one_syscall(&self, sys_num: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].taskinfo.syscall_times[sys_num] += 1;
+    }
+
+    /// Pass the pointer of the current task info.
+    fn pass_syscall_info(&self) -> SyscallInfo {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].taskinfo
+    }
+
+    /// Pass the status of the current task.
+    fn pass_task_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_status
     }
 }
 
@@ -174,6 +202,21 @@ fn mark_current_suspended() {
 /// Change the status of current `Running` task into `Exited`.
 fn mark_current_exited() {
     TASK_MANAGER.mark_current_exited();
+}
+
+/// Add one for the syscall_times nums.
+pub fn add_one_syscall(sys_num: usize) {
+    TASK_MANAGER.add_one_syscall(sys_num);
+}
+
+/// Pass SyscallInfo for other moudles.
+pub fn pass_syscall_info() -> SyscallInfo {
+    TASK_MANAGER.pass_syscall_info()
+}
+
+/// Pass Task status for other modules.
+pub fn pass_task_status() -> TaskStatus {
+    TASK_MANAGER.pass_task_status()
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
