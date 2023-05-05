@@ -14,13 +14,15 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::timer::get_time_ms;
+
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
-pub use task::{TaskControlBlock, TaskStatus};
+pub use task::{TaskControlBlock, TaskStatus, SyscallInfo};
 
 pub use context::TaskContext;
 
@@ -80,6 +82,7 @@ impl TaskManager {
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
+        // Lab1: task_info get time here.
         if inner.tasks[0].taskinfo.time == 0 {
             inner.tasks[0].taskinfo.time = get_time_ms();
         }
@@ -144,6 +147,7 @@ impl TaskManager {
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
+            // Lab1: next_task run, so we start counting here.
             if inner.tasks[next].taskinfo.time == 0 {
                 inner.tasks[next].taskinfo.time = get_time_ms();
             }
