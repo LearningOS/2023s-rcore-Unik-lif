@@ -1,9 +1,14 @@
 //! Process management syscalls
+
+
 use crate::{
     config::MAX_SYSCALL_NUM,
+    mm::translated_va2pa,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, current_user_token, exit_current_and_run_next,
+        suspend_current_and_run_next, TaskStatus,
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -43,7 +48,24 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+     
+    // first get the time here.
+    let us = get_time_us();
+    let sec = us / 1_000_000;
+    let usec = us % 1_000_000;
+    // translate virtual address to physical address.
+    // 1. get the current page_table.
+    // 2. find the ppn.
+    // 3. get the exact physical address, write sec and usec here into the memory.
+    let sec_va = _ts as usize;
+    let usec_va = _ts as usize + 8;
+    let sec_pa = translated_va2pa(current_user_token(), sec_va) as *mut usize;
+    let usec_pa = translated_va2pa(current_user_token(), usec_va) as *mut usize;
+    unsafe {
+        *sec_pa = sec;
+        *usec_pa = usec;
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases

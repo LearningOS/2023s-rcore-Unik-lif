@@ -5,6 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 
+
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
@@ -170,4 +171,13 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// Translate virtual address to physical address quickly, an interface
+pub fn translated_va2pa(token: usize, va_ptr: usize) -> usize {
+    let page_table = PageTable::from_token(token);
+    let va = VirtAddr::from(va_ptr);
+    let vpn = va.floor();
+    let ppn = page_table.translate(vpn).unwrap().ppn();
+    &ppn.get_bytes_array()[va.page_offset()] as *const u8 as usize
 }
