@@ -14,6 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::mm::{VirtAddr, MapPermission, judge_allocation};
 use crate::timer::get_time_ms;
 
 use crate::loader::{get_app_data, get_num_app};
@@ -185,6 +186,21 @@ impl TaskManager {
         let current = inner.current_task;
         inner.tasks[current].task_status
     }
+
+    /// Lab2:
+    /// push area to the current task control blocks.
+    fn push_current_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+        let token = self.get_current_token();
+        // judge whether the page allocated before or not.
+        if let None = judge_allocation(token, start_va.into(), end_va.into()) {
+            return -1;
+        }
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        // not allocated before, so we simply use insert_framed_area here to finish our mappings.
+        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, permission);
+        0
+    }
 }
 
 /// Run the first task in task list.
@@ -248,4 +264,9 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Lab2: push the map area into current task control block.
+pub fn push_current_area(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+    TASK_MANAGER.push_current_area(start_va, end_va, permission)
 }

@@ -1,15 +1,14 @@
 //! Process management syscalls
 
 
-
 use crate::{
     config::MAX_SYSCALL_NUM,
-    mm::translated_va2pa,
+    mm::{translated_va2pa, sys_map_va},
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus, SyscallInfo, pass_task_status, pass_syscall_info
     },
-    timer::{get_time_us, get_time_ms},
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -109,10 +108,14 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     0
 }
 
+/// Map virtual address to physical page number quickly, and interface
+/// In essence it will change MapArea, ppn is not a random one in fact.
+/// We should obey some rules.
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    // implement this function outside.
+    sys_map_va(_start, _len, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -130,18 +133,3 @@ pub fn sys_sbrk(size: i32) -> isize {
     }
 }
 
-/*
-pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    let status: TaskStatus = pass_task_status();
-    let sys_info: SyscallInfo = pass_syscall_info();
-    if status != TaskStatus::Running {
-        return -1;
-    }
-    unsafe {
-        (*_ti).status = TaskStatus::Running;
-        (*_ti).syscall_times = sys_info.syscall_times;
-        (*_ti).time = get_time_ms() - sys_info.time;
-    }
-    0
-}
-*/

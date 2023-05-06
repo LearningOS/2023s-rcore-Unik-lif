@@ -181,3 +181,24 @@ pub fn translated_va2pa(token: usize, va_ptr: usize) -> usize {
     let ppn = page_table.translate(vpn).unwrap().ppn();
     &ppn.get_bytes_array()[va.page_offset()] as *const u8 as usize
 }
+
+/// Judge whether the page allocated before or not.
+pub fn judge_allocation(token: usize, va_start: usize, va_end: usize) -> Option<()> {
+    let page_table = PageTable::from_token(token);
+    let mut start = va_start;
+    while start < va_end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        match page_table.translate(vpn) {
+            None => {},
+            Some(_) => {
+                return None;
+            },
+        }
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(va_end));
+        start = end_va.into();
+    }
+    Some(())
+}
