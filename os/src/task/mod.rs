@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::mm::{VirtAddr, MapPermission, judge_allocation};
+use crate::mm::{VirtAddr, MapPermission, judge_allocation, judge_free};
 use crate::timer::get_time_ms;
 
 use crate::loader::{get_app_data, get_num_app};
@@ -191,14 +191,36 @@ impl TaskManager {
     /// push area to the current task control blocks.
     fn push_current_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
         let token = self.get_current_token();
+        //println!("allocate");
+        // println!("start_va:{:?} end_va:{:?}", start_va, end_va);
         // judge whether the page allocated before or not.
-        if let None = judge_allocation(token, start_va.into(), end_va.into()) {
+        
+        if let None = judge_allocation(token, start_va, end_va) {
             return -1;
         }
+        
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         // not allocated before, so we simply use insert_framed_area here to finish our mappings.
         inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, permission);
+        0
+    }
+
+    /// Lab2:
+    /// release area from the current task control blocks.
+    fn release_current_area(&self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        let token = self.get_current_token();
+        // judge whether the page allocated before or not.
+        if let None = judge_free(token, start_va, end_va) {
+            return -1;
+        }
+        
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        // not freed before, so we simply use set_munmap to release this part.
+        if inner.tasks[current].memory_set.set_munmap(start_va, end_va) == false {
+            return -1;
+        }
         0
     }
 }
@@ -269,4 +291,9 @@ pub fn change_program_brk(size: i32) -> Option<usize> {
 /// Lab2: push the map area into current task control block.
 pub fn push_current_area(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
     TASK_MANAGER.push_current_area(start_va, end_va, permission)
+}
+
+/// Lab2: release the map area from current task control block.
+pub fn release_current_area(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    TASK_MANAGER.release_current_area(start_va, end_va)
 }

@@ -138,6 +138,7 @@ impl PageTable {
     pub fn unmap(&mut self, vpn: VirtPageNum) {
         let pte = self.find_pte(vpn).unwrap();
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        // println!("unmap {:?} {:?}", vpn, pte.ppn());
         *pte = PageTableEntry::empty();
     }
     /// get the page table entry from the virtual page number
@@ -183,22 +184,39 @@ pub fn translated_va2pa(token: usize, va_ptr: usize) -> usize {
 }
 
 /// Judge whether the page allocated before or not.
-pub fn judge_allocation(token: usize, va_start: usize, va_end: usize) -> Option<()> {
+pub fn judge_allocation(token: usize, va_start: VirtAddr, va_end: VirtAddr) -> Option<()> {
     let page_table = PageTable::from_token(token);
-    let mut start = va_start;
-    while start < va_end {
-        let start_va = VirtAddr::from(start);
-        let mut vpn = start_va.floor();
-        match page_table.translate(vpn) {
+    let vpn_start = va_start.floor();
+    let vpn_end = va_end.ceil();
+    for i in vpn_start.0..vpn_end.0 {
+        match page_table.translate(VirtPageNum(i)) {
+            Some(pte) => {
+                if pte.is_valid() {
+                    return None;
+                }
+            },
             None => {},
-            Some(_) => {
+        }
+    }
+    Some(())
+}
+
+/// Judge whether the page is freed before or not.
+pub fn judge_free(token: usize, va_start: VirtAddr, va_end: VirtAddr) -> Option<()> {
+    let page_table = PageTable::from_token(token);
+    let vpn_start = va_start.floor();
+    let vpn_end = va_end.ceil();
+    for i in vpn_start.0..vpn_end.0 {
+        match page_table.translate(VirtPageNum(i)) {
+            Some(pte) => {
+                if !pte.is_valid() {
+                    return None;
+                }
+            },
+            None => {
                 return None;
             },
         }
-        vpn.step();
-        let mut end_va: VirtAddr = vpn.into();
-        end_va = end_va.min(VirtAddr::from(va_end));
-        start = end_va.into();
     }
     Some(())
 }

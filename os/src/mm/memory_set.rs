@@ -7,7 +7,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{
     KERNEL_STACK_SIZE, MEMORY_END, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE,
 };
-use crate::task::push_current_area;
+use crate::task::{push_current_area, release_current_area};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -59,6 +59,8 @@ impl MemorySet {
         end_va: VirtAddr,
         permission: MapPermission,
     ) {
+        // println!("insert_framed_area");
+        // println!("{:?} {:?}", VirtPageNum::from(start_va), VirtPageNum::from(end_va));
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
@@ -263,6 +265,20 @@ impl MemorySet {
             false
         }
     }
+
+    /// Lab2: munmap a region
+    pub fn set_munmap(&mut self, start: VirtAddr, end: VirtAddr) -> bool {
+        if let Some(area) = self
+            .areas
+            .iter_mut()
+            .find(|area| area.vpn_range.get_start() == start.floor())
+        {
+            area.set_munmap(&mut self.page_table, end.ceil());
+            true
+        } else {
+            false
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -348,7 +364,7 @@ impl MapArea {
         }
         self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
     }
-    
+
     /// data: start-aligned but maybe with shorter length
     /// assume that all frames were cleared before
     pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8]) {
@@ -371,6 +387,18 @@ impl MapArea {
             current_vpn.step();
         }
     }
+
+    /// Lab2:
+    /// set_munmap: release memory start from self.vpn_range.get_start() to end.
+    /// Maybe there'll still be some memory space, so vpn_range should be changed.
+    pub fn set_munmap(&mut self, page_table: &mut PageTable, end: VirtPageNum) {
+        for vpn in VPNRange::new(self.vpn_range.get_start(), end) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(end, self.vpn_range.get_end());
+        // println!("vpn_range:{:?} {:?}", self.vpn_range.get_start(), self.vpn_range.get_end());
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -430,9 +458,13 @@ pub fn remap_test() {
 /// Lab2: virtual address.
 /// Use virtual address to get the MapArea here.
 pub fn sys_map_va(va_start: usize, va_len: usize, va_port: usize) -> isize {
-    // first, we should get the map area.
-    let start_va = VirtAddr(va_start);
-    let end_va = VirtAddr(va_len + va_start);
+    // first, check some parameters for mapArea.
+    let start_va = VirtAddr::from(va_start);
+    // start_va should be of no offsets.
+    if start_va.page_offset() != 0 {
+        return -1;
+    }
+    let end_va = VirtAddr::from(va_len + va_start);
     if va_port & 0x7 == 0 || va_port & !0x7 != 0 {
         return -1;
     }
@@ -448,4 +480,17 @@ pub fn sys_map_va(va_start: usize, va_len: usize, va_port: usize) -> isize {
     }
 
     push_current_area(start_va, end_va, map_perm)
+}
+
+/// Lab2: virtual address.
+/// Use virtual address to release the MapArea here.
+pub fn sys_unmap_va(va_start: usize, va_len: usize) -> isize {
+    let start_va = VirtAddr::from(va_start);
+    // start_va should be aligned for multi of 4 KB.
+    if start_va.page_offset() != 0 {
+        return -1;
+    }
+    let end_va = VirtAddr::from(va_len + va_start);
+
+    release_current_area(start_va, end_va)
 }
