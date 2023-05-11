@@ -64,6 +64,7 @@ impl PageTableEntry {
     }
 }
 
+#[derive(Clone)]
 /// page table structure
 pub struct PageTable {
     root_ppn: PhysPageNum,

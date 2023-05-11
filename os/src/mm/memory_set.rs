@@ -30,6 +30,7 @@ lazy_static! {
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
+
 /// address space
 pub struct MemorySet {
     page_table: PageTable,
@@ -301,6 +302,8 @@ impl MemorySet {
         }
     }
 }
+
+#[derive(Clone)]
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
     vpn_range: VPNRange,

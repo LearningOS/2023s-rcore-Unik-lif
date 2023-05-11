@@ -98,6 +98,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
         // ++++ release child PCB
     });
+    trace!("hello1");
     if let Some((idx, _)) = pair {
         let child = inner.children.remove(idx);
         // confirm that child will be deallocated after being removed from children list
@@ -107,8 +108,10 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         let exit_code = child.inner_exclusive_access().exit_code;
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        trace!("hello2");
         found_pid as isize
     } else {
+        trace!("hello3");
         -2
     }
     // ---- release current PCB automatically
@@ -167,11 +170,72 @@ pub fn sys_sbrk(size: i32) -> isize {
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
+    // println!("path:{:?}", _path);
     trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
+        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED _path:{:?}",
+        current_task().unwrap().pid.0, _path
     );
-    -1
+    
+    // get the current_task
+    let current_task = current_task().unwrap();
+    // Two cases:
+    // 1. if the _path is a valid thing, we can simply load it. Therefore we don't have to use fork, we can use vfork instead.
+    // 2. if the _path is not valid, we don't allocate a new process.
+    let token = current_task.get_user_token();
+    let path = translated_str(token, _path);
+    
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        let new_task = current_task.vfork();
+        let new_pid = new_task.pid.0 as isize;
+        trace!(
+            "task:{:?}", path.as_str()
+        );    
+        // load the data.
+        new_task.exec(data);
+        add_task(new_task);
+        new_pid
+    } else {
+        let new_task = current_task.fork();
+        let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+        trap_cx.x[10] = 0;
+        add_task(new_task);
+        trace!(
+            "fail to spawn, simply exit"
+        ); 
+        -1
+    }
+      
+/*
+pub fn sys_fork() -> isize {
+    trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
+    let current_task = current_task().unwrap();
+    let new_task = current_task.fork();
+    let new_pid = new_task.pid.0;
+    // modify trap context of new_task, because it returns immediately after switching
+    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    // we do not have to move to next instruction since we have done it before
+    // for child process, fork returns 0
+    trap_cx.x[10] = 0;
+    // add new task to scheduler
+    add_task(new_task);
+    new_pid as isize
+}
+
+pub fn sys_exec(path: *const u8) -> isize {
+    trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        let task = current_task().unwrap();
+        task.exec(data);
+        0
+    } else {
+        -1
+    }
+}
+ */
+
+    //-1
 }
 
 // YOUR JOB: Set task priority.

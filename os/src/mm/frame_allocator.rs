@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 use lazy_static::*;
 
+#[derive(Clone)]
 /// tracker for physical page frame allocation and deallocation
 pub struct FrameTracker {
     /// physical page number
