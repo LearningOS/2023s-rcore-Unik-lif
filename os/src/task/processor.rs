@@ -5,7 +5,7 @@
 //! and the replacement and transfer of control flow of different applications are executed.
 
 use super::__switch;
-use super::{fetch_task, TaskStatus};
+use super::{fetch_task, TaskStatus, SyscallInfo};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
@@ -92,7 +92,7 @@ pub fn current_user_token() -> usize {
     task.get_user_token()
 }
 
-///Get the mutable reference to trap context of current task
+/// Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task()
         .unwrap()
@@ -100,7 +100,7 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
         .get_trap_cx()
 }
 
-///Return to idle control flow for new scheduling
+/// Return to idle control flow for new scheduling
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     let mut processor = PROCESSOR.exclusive_access();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
@@ -108,4 +108,14 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// pass task status of the current task.
+pub fn pass_task_status() -> TaskStatus {
+    current_task().unwrap().inner_exclusive_access().get_status()
+}
+
+/// pass task syscall info of the current task
+pub fn pass_syscall_info() -> SyscallInfo {
+    current_task().unwrap().inner_exclusive_access().get_taskinfo()
 }

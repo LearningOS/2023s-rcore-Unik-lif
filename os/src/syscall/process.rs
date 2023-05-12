@@ -1,4 +1,5 @@
 //! Process management syscalls
+
 use alloc::sync::Arc;
 
 use crate::{
@@ -7,8 +8,9 @@ use crate::{
     mm::{translated_refmut, translated_str},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        suspend_current_and_run_next, TaskStatus, TaskControlBlock, pass_task_status, SyscallInfo, pass_syscall_info
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -125,7 +127,21 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    // first get the time here.
+    let us = get_time_us();
+    let sec = us / 1_000_000;
+    let usec = us % 1_000_000;
+
+    let sec_va = _ts as usize;
+    let usec_va = _ts as usize + 8;
+    let sec_pa = translated_refmut(token, sec_va as *mut usize) as *mut usize;
+    let usec_pa = translated_refmut(token, usec_va  as *mut usize) as *mut usize;
+    unsafe {
+        *sec_pa = sec;
+        *usec_pa = usec;
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -136,7 +152,34 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // first get taskinfo here.
+    let token = current_user_token();
+    let status: TaskStatus = pass_task_status();
+    let sys_info: SyscallInfo = pass_syscall_info();
+
+    if status != TaskStatus::Running {
+        return -1;
+    }
+
+    // translate virtual address to physical address.
+    // hard cases can exist, for we stored too much in the syscall_tables.
+    unsafe {
+        let taskinfo_va = &((*_ti).status) as *const _ as usize;
+        let syscall_va_base = &((*_ti).syscall_times[0]) as *const _ as usize;
+        let time_va = &((*_ti).time) as *const _ as usize;
+    
+        let status_pa = translated_refmut(token, taskinfo_va as *mut TaskStatus);
+        let time_pa = translated_refmut(token, time_va as *mut usize);
+        
+        *status_pa = TaskStatus::Running;
+        // precision problem.
+        *time_pa = (get_time_us() / 1000) - sys_info.time;
+        for i in 0..MAX_SYSCALL_NUM {
+            let syscall_pa = translated_refmut(token, (syscall_va_base + 4 * i) as *mut u32);
+            *syscall_pa = sys_info.syscall_times[i];
+        }
+    }
+    0
 }
 
 /// YOUR JOB: Implement mmap.
@@ -185,57 +228,27 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     let path = translated_str(token, _path);
     
     if let Some(data) = get_app_data_by_name(path.as_str()) {
-        let new_task = current_task.vfork();
+        let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(data));
         let new_pid = new_task.pid.0 as isize;
+        let mut inner = new_task.inner_exclusive_access();
+        inner.parent = Some(Arc::downgrade(&current_task));
+        // add child for the current_task.
+        drop(inner);
+        
+        // father add child.
+        let mut father_inner = current_task.inner_exclusive_access();
+        father_inner.children.push(new_task.clone());
+ 
+        drop(father_inner);
         trace!(
             "task:{:?}", path.as_str()
         );    
         // load the data.
-        new_task.exec(data);
         add_task(new_task);
         new_pid
     } else {
-        let new_task = current_task.fork();
-        let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
-        trap_cx.x[10] = 0;
-        add_task(new_task);
-        trace!(
-            "fail to spawn, simply exit"
-        ); 
         -1
     }
-      
-/*
-pub fn sys_fork() -> isize {
-    trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
-    let current_task = current_task().unwrap();
-    let new_task = current_task.fork();
-    let new_pid = new_task.pid.0;
-    // modify trap context of new_task, because it returns immediately after switching
-    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
-    // we do not have to move to next instruction since we have done it before
-    // for child process, fork returns 0
-    trap_cx.x[10] = 0;
-    // add new task to scheduler
-    add_task(new_task);
-    new_pid as isize
-}
-
-pub fn sys_exec(path: *const u8) -> isize {
-    trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
-    let token = current_user_token();
-    let path = translated_str(token, path);
-    if let Some(data) = get_app_data_by_name(path.as_str()) {
-        let task = current_task().unwrap();
-        task.exec(data);
-        0
-    } else {
-        -1
-    }
-}
- */
-
-    //-1
 }
 
 // YOUR JOB: Set task priority.

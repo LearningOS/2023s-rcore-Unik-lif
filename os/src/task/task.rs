@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -68,6 +68,10 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Lab1: The task info
+    /// Syscall info
+    pub taskinfo: SyscallInfo,
 }
 
 impl TaskControlBlockInner {
@@ -79,11 +83,15 @@ impl TaskControlBlockInner {
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
-    fn get_status(&self) -> TaskStatus {
+    pub fn get_status(&self) -> TaskStatus {
         self.task_status
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+
+    pub fn get_taskinfo(&self) -> SyscallInfo {
+        self.taskinfo
     }
 }
 
@@ -118,6 +126,10 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    taskinfo: SyscallInfo {
+                        syscall_times: [0; MAX_SYSCALL_NUM],
+                        time: 0,
+                    },
                 })
             },
         };
@@ -191,6 +203,10 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    taskinfo: SyscallInfo {
+                        syscall_times: [0; MAX_SYSCALL_NUM],
+                        time: 0,
+                    },
                 })
             },
         });
@@ -206,45 +222,6 @@ impl TaskControlBlock {
         // ---- release parent PCB
     }
 
-    /// Lab3: simply use the same Memory_set will be ok.
-    /// parent process fork the child process, but without using more physical memory.
-    pub fn vfork(self: &Arc<Self>) -> Arc<Self> {
-        // ---- access parent PCB exclusively
-        let mut parent_inner = self.inner_exclusive_access();
-
-        // alloc a pid and a kernel stack in kernel space
-        let pid_handle = pid_alloc();
-        let kernel_stack = kstack_alloc();
-        let kernel_stack_top = kernel_stack.get_top();
-        let task_control_block = Arc::new(TaskControlBlock {
-            pid: pid_handle,
-            kernel_stack,
-            inner: unsafe {
-                UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx_ppn: parent_inner.trap_cx_ppn,
-                    base_size: parent_inner.base_size,
-                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
-                    task_status: TaskStatus::Ready,
-                    memory_set: MemorySet::new_bare(),
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    heap_bottom: parent_inner.heap_bottom,
-                    program_brk: parent_inner.program_brk,
-                })
-            },
-        });
-        // add child
-        parent_inner.children.push(task_control_block.clone());
-        // modify kernel_sp in trap_cx
-        // **** access child PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
-        trap_cx.kernel_sp = kernel_stack_top;
-        // return
-        task_control_block
-        // **** release child PCB
-        // ---- release parent PCB
-    }
 
     /// get pid of process
     pub fn getpid(&self) -> usize {
@@ -289,4 +266,14 @@ pub enum TaskStatus {
     Running,
     /// exited
     Zombie,
+}
+
+/// Lab1: my taskinfo.
+/// The syscall info of a task.
+#[derive(Copy, Clone)]
+pub struct SyscallInfo {
+    /// The numbers of syscall called by task
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    /// Total running time of a task.
+    pub time: usize,
 }
