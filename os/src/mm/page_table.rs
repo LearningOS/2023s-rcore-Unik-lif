@@ -214,3 +214,42 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .get_mut()
 }
+
+
+/// Judge whether the page allocated before or not.
+pub fn judge_allocation(token: usize, va_start: VirtAddr, va_end: VirtAddr) -> Option<()> {
+    let page_table = PageTable::from_token(token);
+    let vpn_start = va_start.floor();
+    let vpn_end = va_end.ceil();
+    for i in vpn_start.0..vpn_end.0 {
+        match page_table.translate(VirtPageNum(i)) {
+            Some(pte) => {
+                if pte.is_valid() {
+                    return None;
+                }
+            },
+            None => {},
+        }
+    }
+    Some(())
+}
+
+/// Judge whether the page is freed before or not.
+pub fn judge_free(token: usize, va_start: VirtAddr, va_end: VirtAddr) -> Option<()> {
+    let page_table = PageTable::from_token(token);
+    let vpn_start = va_start.floor();
+    let vpn_end = va_end.ceil();
+    for i in vpn_start.0..vpn_end.0 {
+        match page_table.translate(VirtPageNum(i)) {
+            Some(pte) => {
+                if !pte.is_valid() {
+                    return None;
+                }
+            },
+            None => {
+                return None;
+            },
+        }
+    }
+    Some(())
+}

@@ -188,7 +188,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    sys_map_va(_start, _len, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -197,7 +197,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    sys_unmap_va(_start, _len)
 }
 
 /// change data segment size

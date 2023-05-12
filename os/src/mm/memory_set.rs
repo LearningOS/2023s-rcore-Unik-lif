@@ -30,7 +30,6 @@ lazy_static! {
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
-
 /// address space
 pub struct MemorySet {
     page_table: PageTable,
@@ -301,9 +300,21 @@ impl MemorySet {
             false
         }
     }
-}
 
-#[derive(Clone)]
+    /// Lab2: munmap a region
+    pub fn set_munmap(&mut self, start: VirtAddr, end: VirtAddr) -> bool {
+        if let Some(area) = self
+            .areas
+            .iter_mut()
+            .find(|area| area.vpn_range.get_start() == start.floor())
+        {
+            area.set_munmap(&mut self.page_table, end.ceil());
+            true
+        } else {
+            false
+        }
+    }
+}
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
     vpn_range: VPNRange,
@@ -403,6 +414,18 @@ impl MapArea {
             current_vpn.step();
         }
     }
+
+    /// Lab2:
+    /// set_munmap: release memory start from self.vpn_range.get_start() to end.
+    /// Maybe there'll still be some memory space, so vpn_range should be changed.
+    pub fn set_munmap(&mut self, page_table: &mut PageTable, end: VirtPageNum) {
+        for vpn in VPNRange::new(self.vpn_range.get_start(), end) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(end, self.vpn_range.get_end());
+        // println!("vpn_range:{:?} {:?}", self.vpn_range.get_start(), self.vpn_range.get_end());
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -449,4 +472,45 @@ pub fn remap_test() {
         .unwrap()
         .executable(),);
     println!("remap_test passed!");
+}
+
+
+/// Lab2: virtual address.
+/// Use virtual address to get the MapArea here.
+pub fn sys_map_va(va_start: usize, va_len: usize, va_port: usize) -> isize {
+    // first, check some parameters for mapArea.
+    let start_va = VirtAddr::from(va_start);
+    // start_va should be of no offsets.
+    if start_va.page_offset() != 0 {
+        return -1;
+    }
+    let end_va = VirtAddr::from(va_len + va_start);
+    if va_port & 0x7 == 0 || va_port & !0x7 != 0 {
+        return -1;
+    }
+    let mut map_perm = MapPermission::U;
+    if let 1 = va_port & 0x1 {
+        map_perm |= MapPermission::R;
+    }
+    if let 2 = va_port & 0x2 {
+        map_perm |= MapPermission::W;
+    }
+    if let 4 = va_port & 0x4 {
+        map_perm |= MapPermission::X;
+    }
+
+    push_current_area(start_va, end_va, map_perm)
+}
+
+/// Lab2: virtual address.
+/// Use virtual address to release the MapArea here.
+pub fn sys_unmap_va(va_start: usize, va_len: usize) -> isize {
+    let start_va = VirtAddr::from(va_start);
+    // start_va should be aligned for multi of 4 KB.
+    if start_va.page_offset() != 0 {
+        return -1;
+    }
+    let end_va = VirtAddr::from(va_len + va_start);
+
+    release_current_area(start_va, end_va)
 }
