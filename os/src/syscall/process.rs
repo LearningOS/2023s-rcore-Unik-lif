@@ -3,12 +3,12 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, BIG_STRIDE},
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{translated_refmut, translated_str, VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus, TaskControlBlock, pass_task_status, SyscallInfo, pass_syscall_info
+        suspend_current_and_run_next, TaskStatus, TaskControlBlock, pass_task_status, SyscallInfo, pass_syscall_info, push_current_area, release_current_area
     },
     timer::get_time_us,
 };
@@ -188,7 +188,29 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    sys_map_va(_start, _len, _port)
+    // Check whether _start, _port are valid.
+    // first, check some parameters for mapArea.
+    let start_va = VirtAddr::from(_start);
+    // start_va should be of no offsets.
+    if start_va.page_offset() != 0 {
+        return -1;
+    }
+    let end_va = VirtAddr::from(_len + _start);
+    if _port & 0x7 == 0 || _port & !0x7 != 0 {
+        return -1;
+    }
+    let mut map_perm = MapPermission::U;
+    if let 1 = _port & 0x1 {
+        map_perm |= MapPermission::R;
+    }
+    if let 2 = _port & 0x2 {
+        map_perm |= MapPermission::W;
+    }
+    if let 4 = _port & 0x4 {
+        map_perm |= MapPermission::X;
+    }
+    // push the va into current task.
+    push_current_area(start_va, end_va, map_perm)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -197,7 +219,15 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    sys_unmap_va(_start, _len)
+    // Check whether _start is valid.
+    let start_va = VirtAddr::from(_start);
+    // start_va should be aligned for multi of 4 KB.
+    if start_va.page_offset() != 0 {
+        return -1;
+    }
+    let end_va = VirtAddr::from(_len + _start);
+
+    release_current_area(start_va, end_va)
 }
 
 /// change data segment size
@@ -257,5 +287,14 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio <= 1 {
+        return -1;
+    }
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    let u_prio = _prio as usize;
+    inner.taskinfo.priority = u_prio;
+    inner.taskinfo.pass = BIG_STRIDE / u_prio;
+    drop(inner);
+    _prio
 }

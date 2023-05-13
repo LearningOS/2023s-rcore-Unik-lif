@@ -8,9 +8,11 @@ use super::__switch;
 use super::{fetch_task, TaskStatus, SyscallInfo};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use crate::mm::{VirtAddr, MapPermission};
 
 /// Processor management structure
 pub struct Processor {
@@ -44,6 +46,7 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+
 }
 
 lazy_static! {
@@ -61,6 +64,10 @@ pub fn run_tasks() {
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            if task_inner.taskinfo.time == 0 {
+                task_inner.taskinfo.time = get_time_ms();
+            }
+            task_inner.taskinfo.add_stride();
             // release coming task_inner manually
             drop(task_inner);
             // release coming task TCB manually
@@ -118,4 +125,19 @@ pub fn pass_task_status() -> TaskStatus {
 /// pass task syscall info of the current task
 pub fn pass_syscall_info() -> SyscallInfo {
     current_task().unwrap().inner_exclusive_access().get_taskinfo()
+}
+
+/// Add one for the syscall_times nums.
+pub fn add_one_syscall(sys_num: usize) {
+    current_task().unwrap().inner_exclusive_access().add_one_syscall(sys_num);
+}
+
+/// Lab2: push the map area into current task control block.
+pub fn push_current_area(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+    current_task().unwrap().push_current_area(start_va, end_va, permission)
+}
+
+/// Lab2: release the map area from current task control block.
+pub fn release_current_area(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    current_task().unwrap().release_current_area(start_va, end_va)
 }
