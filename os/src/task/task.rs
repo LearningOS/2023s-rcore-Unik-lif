@@ -343,11 +343,13 @@ impl PartialOrd for Stride {
     }
 }
 
+
 impl PartialEq for Stride {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, _other: &Self) -> bool {
         false
     }
 }
+
 
 /// Lab1: my taskinfo.
 /// The syscall info of a task.
@@ -366,7 +368,7 @@ pub struct SyscallInfo {
 }
 
 impl SyscallInfo {
-    // add pass for the stride.
+    /// add pass for the stride.
     pub fn add_stride(&mut self) {
         self.stride.0 += self.pass;
     }

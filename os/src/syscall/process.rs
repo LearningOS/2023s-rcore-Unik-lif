@@ -15,8 +15,11 @@ use crate::{
 
 #[repr(C)]
 #[derive(Debug)]
+/// TimeVal: store time info.
 pub struct TimeVal {
+    /// sec part.
     pub sec: usize,
+    /// usec part.
     pub usec: usize,
 }
 
@@ -44,12 +47,12 @@ pub fn sys_yield() -> isize {
     suspend_current_and_run_next();
     0
 }
-
+/// get sys pid info.
 pub fn sys_getpid() -> isize {
     trace!("kernel: sys_getpid pid:{}", current_task().unwrap().pid.0);
     current_task().unwrap().pid.0 as isize
 }
-
+/// fork a process.
 pub fn sys_fork() -> isize {
     trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
     let current_task = current_task().unwrap();
@@ -64,7 +67,7 @@ pub fn sys_fork() -> isize {
     add_task(new_task);
     new_pid as isize
 }
-
+/// exec a new process.
 pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
@@ -281,7 +284,8 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     }
 }
 
-// YOUR JOB: Set task priority.
+/// YOUR JOB: Set task priority.
+/// Set task priority
 pub fn sys_set_priority(_prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
