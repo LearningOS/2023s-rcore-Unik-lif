@@ -5,7 +5,6 @@
 //! map area and memory set, is implemented here.
 //!
 //! Every task or process has a memory_set to control its virtual memory.
-
 mod address;
 mod frame_allocator;
 mod heap_allocator;
@@ -17,10 +16,10 @@ pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::remap_test;
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-use page_table::PTEFlags;
+use page_table::{PTEFlags, PageTable};
 pub use page_table::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator,
+    PageTableEntry, UserBuffer, UserBufferIterator, judge_allocation, judge_free
 };
 
 /// initiate heap allocator, frame allocator and kernel space

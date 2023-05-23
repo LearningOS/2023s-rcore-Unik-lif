@@ -1,15 +1,16 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM, BIG_STRIDE};
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE, MapPermission, judge_allocation, judge_free};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::cmp::Ordering;
 
 /// Task control block structure
 ///
@@ -36,7 +37,48 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
     }
+
+    /// Lab2:
+    /// push area to the current task control blocks.
+    pub fn push_current_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+        let token = self.get_user_token();
+        
+        // judge whether the page allocated before or not.
+        if let None = judge_allocation(token, start_va, end_va) {
+            return -1;
+        }
+
+        let mut inner = self.inner_exclusive_access();
+        // not allocated before, so we simply use insert_framed_area here to finish our mappings.
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+        0
+    }
+
+    /// Lab2:
+    /// release area from the current task control blocks.
+    pub fn release_current_area(&self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        let token = self.get_user_token();
+        
+        // judge whether the page allocated before or not.
+        if let None = judge_free(token, start_va, end_va) {
+            return -1;
+        }
+
+        let mut inner = self.inner_exclusive_access();
+        // not freed before, so we simply use set_munmap to release this part.
+        if inner.memory_set.set_munmap(start_va, end_va) == false {
+            return -1;
+        }
+        0
+    }
+    /// Lab3: 
+    /// return the stride of the task.
+    pub fn get_stride(&self) -> Stride {
+        self.inner_exclusive_access().taskinfo.stride
+    }
 }
+
+
 
 pub struct TaskControlBlockInner {
     /// The physical page number of the frame where the trap context is placed
@@ -71,16 +113,22 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Lab1: The task info
+    /// Syscall info
+    pub taskinfo: SyscallInfo,
 }
 
 impl TaskControlBlockInner {
+    /// get the trap context
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.get_mut()
     }
+    /// get the user token
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
-    fn get_status(&self) -> TaskStatus {
+    pub fn get_status(&self) -> TaskStatus {
         self.task_status
     }
     pub fn is_zombie(&self) -> bool {
@@ -94,6 +142,15 @@ impl TaskControlBlockInner {
             self.fd_table.len() - 1
         }
     }
+
+    pub fn get_taskinfo(&self) -> SyscallInfo {
+        self.taskinfo
+    }
+
+    pub fn add_one_syscall(&mut self, sys_num: usize) {
+        self.taskinfo.syscall_times[sys_num] += 1;
+    }
+
 }
 
 impl TaskControlBlock {
@@ -135,6 +192,13 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    taskinfo: SyscallInfo {
+                        syscall_times: [0; MAX_SYSCALL_NUM],
+                        time: 0,
+                        stride: Stride(0),
+                        pass: BIG_STRIDE / 16,
+                        priority: 16,
+                    },
                 })
             },
         };
@@ -216,6 +280,13 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    taskinfo: SyscallInfo {
+                        syscall_times: [0; MAX_SYSCALL_NUM],
+                        time: 0,
+                        stride: Stride(0),
+                        pass: BIG_STRIDE / 16,
+                        priority: 16,
+                    },
                 })
             },
         });
@@ -274,4 +345,57 @@ pub enum TaskStatus {
     Running,
     /// exited
     Zombie,
+}
+
+/// Lab3:
+/// implement Stride type here. 
+#[derive(Copy, Clone)]
+pub struct Stride(usize);
+
+impl Stride {
+    // initialize:
+    pub fn new(_t: usize) -> Self {
+        Stride(_t)
+    }
+}
+
+impl PartialOrd for Stride {
+    // We tend to return the min value.
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.0 - other.0 > BIG_STRIDE / 2 {
+            return Some(self.0.cmp(&other.0));
+        }
+        Some(other.0.cmp(&self.0))
+    }
+}
+
+
+impl PartialEq for Stride {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+
+/// Lab1: my taskinfo.
+/// The syscall info of a task.
+#[derive(Copy, Clone)]
+pub struct SyscallInfo {
+    /// The numbers of syscall called by task
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    /// Total running time of a task.
+    pub time: usize,
+    /// Stride so far.
+    pub stride: Stride,
+    /// Every Pass for a stride.
+    pub pass: usize,
+    /// Priority of the task.
+    pub priority: usize,
+}
+
+impl SyscallInfo {
+    /// add pass for the stride.
+    pub fn add_stride(&mut self) {
+        self.stride.0 += self.pass;
+    }
 }

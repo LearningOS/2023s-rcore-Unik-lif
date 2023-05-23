@@ -318,6 +318,20 @@ impl MemorySet {
             false
         }
     }
+
+    /// Lab2: munmap a region
+    pub fn set_munmap(&mut self, start: VirtAddr, end: VirtAddr) -> bool {
+        if let Some(area) = self
+            .areas
+            .iter_mut()
+            .find(|area| area.vpn_range.get_start() == start.floor())
+        {
+            area.set_munmap(&mut self.page_table, end.ceil());
+            true
+        } else {
+            false
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -418,6 +432,18 @@ impl MapArea {
             current_vpn.step();
         }
     }
+
+    /// Lab2:
+    /// set_munmap: release memory start from self.vpn_range.get_start() to end.
+    /// Maybe there'll still be some memory space, so vpn_range should be changed.
+    pub fn set_munmap(&mut self, page_table: &mut PageTable, end: VirtPageNum) {
+        for vpn in VPNRange::new(self.vpn_range.get_start(), end) {
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(end, self.vpn_range.get_end());
+        // println!("vpn_range:{:?} {:?}", self.vpn_range.get_start(), self.vpn_range.get_end());
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
