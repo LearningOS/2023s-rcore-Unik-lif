@@ -2,10 +2,11 @@
 //!
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::{
     config::{MAX_SYSCALL_NUM, BIG_STRIDE},
-    fs::{open_file, OpenFlags},
+    fs::{open_file, OpenFlags, File},
     mm::{translated_refmut, translated_str, VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
@@ -263,8 +264,22 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         let all_data = app_inode.read_all();
         let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(all_data.as_slice()));
         let new_pid = new_task.pid.0 as isize;
+
+        let father_inner = current_task.inner_exclusive_access();
+        // copy fd table
+        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
+        for fd in father_inner.fd_table.iter() {
+            if let Some(file) = fd {
+                new_fd_table.push(Some(file.clone()));
+            } else {
+                new_fd_table.push(None);
+            }
+        }
+        drop(father_inner);
+
         let mut inner = new_task.inner_exclusive_access();
         inner.parent = Some(Arc::downgrade(&current_task));
+        inner.fd_table = new_fd_table;
         // add child for the current_task.
         drop(inner);
         
@@ -273,15 +288,48 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         father_inner.children.push(new_task.clone());
  
         drop(father_inner);
+
         trace!(
             "task:{:?}", path.as_str()
-        );    
+        );
         // load the data.
         add_task(new_task);
         new_pid
     } else {
         -1
     }
+
+    /* 
+    pub fn sys_fork() -> isize {
+    trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
+    let current_task = current_task().unwrap();
+    let new_task = current_task.fork();
+    let new_pid = new_task.pid.0;
+    // modify trap context of new_task, because it returns immediately after switching
+    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    // we do not have to move to next instruction since we have done it before
+    // for child process, fork returns 0
+    trap_cx.x[10] = 0;
+    // add new task to scheduler
+    add_task(new_task);
+    new_pid as isize
+}
+/// exec a new process.
+pub fn sys_exec(path: *const u8) -> isize {
+    trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let task = current_task().unwrap();
+        task.exec(all_data.as_slice());
+        0
+    } else {
+        -1
+    }
+}
+
+    */
 }
 
 /// YOUR JOB: Set task priority.
