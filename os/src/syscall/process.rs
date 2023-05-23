@@ -1,11 +1,12 @@
 //! Process management syscalls
 //!
+
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, BIG_STRIDE},
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str},
+    mm::{translated_refmut, translated_str, VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus, TaskControlBlock, pass_task_status, SyscallInfo, pass_syscall_info, push_current_area, release_current_area
@@ -257,8 +258,10 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     let token = current_task.get_user_token();
     let path = translated_str(token, _path);
     
-    if let Some(data) = get_app_data_by_name(path.as_str()) {
-        let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(data));
+
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(all_data.as_slice()));
         let new_pid = new_task.pid.0 as isize;
         let mut inner = new_task.inner_exclusive_access();
         inner.parent = Some(Arc::downgrade(&current_task));

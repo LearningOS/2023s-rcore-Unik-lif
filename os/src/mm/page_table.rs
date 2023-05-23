@@ -275,6 +275,7 @@ impl Iterator for UserBufferIterator {
             Some(r)
         }
     }
+}
 
 /// Judge whether the page allocated before or not.
 pub fn judge_allocation(token: usize, va_start: VirtAddr, va_end: VirtAddr) -> Option<()> {

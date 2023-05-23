@@ -16,10 +16,10 @@ pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 pub use memory_set::remap_test;
 pub use memory_set::{kernel_token, MapPermission, MemorySet, KERNEL_SPACE};
-use page_table::{PTEFlags, PageTable};
+use page_table::{PTEFlags};
 pub use page_table::{
-    translated_byte_buffer, translated_ref, translated_refmut, translated_str, PageTable,
-    PageTableEntry, UserBuffer, UserBufferIterator, judge_allocation, judge_free
+    translated_byte_buffer, translated_ref, translated_refmut, translated_str,
+    PageTableEntry, UserBuffer, UserBufferIterator, judge_allocation, judge_free, PageTable
 };
 
 /// initiate heap allocator, frame allocator and kernel space
