@@ -2,11 +2,10 @@
 //!
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 
 use crate::{
     config::{MAX_SYSCALL_NUM, BIG_STRIDE},
-    fs::{open_file, OpenFlags, File},
+    fs::{open_file, OpenFlags},
     mm::{translated_refmut, translated_str, VirtAddr, MapPermission},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,

@@ -1,10 +1,7 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat, ROOT_INODE, OSInode, search_file, StatMode, add_link, unlink};
+use crate::fs::{open_file, OpenFlags, Stat, ROOT_INODE, search_file, StatMode, add_link, unlink};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, translated_refmut};
 use crate::task::{current_task, current_user_token};
-use core::{str::from_utf8, slice::from_raw_parts};
-use alloc::sync::Arc;
-use alloc::collections::BTreeMap;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     trace!("kernel:pid[{}] sys_write", current_task().unwrap().pid.0);

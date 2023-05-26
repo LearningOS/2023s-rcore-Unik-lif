@@ -8,7 +8,7 @@ use super::File;
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
-use crate::fs::{Stat, StatMode};
+use crate::fs::StatMode;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -88,9 +88,9 @@ impl OSInode {
     */
 }
 
-/// ROOT_INODE:
-/// we use this as the root_inode of our os's filesystem.
+
 lazy_static! {
+    /// ROOT_INODE: the ROOT_INODE of the file system.
     pub static ref ROOT_INODE: Arc<Inode> = {
         let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
         Arc::new(EasyFileSystem::root_inode(&efs))
@@ -212,7 +212,7 @@ impl File for OSInode {
         total_write_size
     }
     fn get_stat(&self) -> (u64, StatMode) {
-        let mut inner = self.inner.exclusive_access();
+        let inner = self.inner.exclusive_access();
         // let ino = inner.inode
         let (ino, mode) = inner.inode.get_stat();
         if mode == true {
