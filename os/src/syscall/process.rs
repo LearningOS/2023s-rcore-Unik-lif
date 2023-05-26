@@ -86,7 +86,7 @@ pub fn sys_exec(path: *const u8) -> isize {
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
-    //trace!("kernel: sys_waitpid");
+    trace!("kernel: sys_waitpid");
     let task = current_task().unwrap();
     // find a child process
 
@@ -246,6 +246,7 @@ pub fn sys_sbrk(size: i32) -> isize {
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
     // println!("path:{:?}", _path);
+
     trace!(
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED _path:{:?}",
         current_task().unwrap().pid.0, _path
@@ -258,36 +259,11 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     // 2. if the _path is not valid, we don't allocate a new process.
     let token = current_task.get_user_token();
     let path = translated_str(token, _path);
-    
 
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
-        let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(all_data.as_slice()));
+        let new_task: Arc<TaskControlBlock> = current_task.spawn(all_data.as_slice());
         let new_pid = new_task.pid.0 as isize;
-
-        let father_inner = current_task.inner_exclusive_access();
-        // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
-        for fd in father_inner.fd_table.iter() {
-            if let Some(file) = fd {
-                new_fd_table.push(Some(file.clone()));
-            } else {
-                new_fd_table.push(None);
-            }
-        }
-        drop(father_inner);
-
-        let mut inner = new_task.inner_exclusive_access();
-        inner.parent = Some(Arc::downgrade(&current_task));
-        inner.fd_table = new_fd_table;
-        // add child for the current_task.
-        drop(inner);
-        
-        // father add child.
-        let mut father_inner = current_task.inner_exclusive_access();
-        father_inner.children.push(new_task.clone());
- 
-        drop(father_inner);
 
         trace!(
             "task:{:?}", path.as_str()
@@ -299,37 +275,6 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         -1
     }
 
-    /* 
-    pub fn sys_fork() -> isize {
-    trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
-    let current_task = current_task().unwrap();
-    let new_task = current_task.fork();
-    let new_pid = new_task.pid.0;
-    // modify trap context of new_task, because it returns immediately after switching
-    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
-    // we do not have to move to next instruction since we have done it before
-    // for child process, fork returns 0
-    trap_cx.x[10] = 0;
-    // add new task to scheduler
-    add_task(new_task);
-    new_pid as isize
-}
-/// exec a new process.
-pub fn sys_exec(path: *const u8) -> isize {
-    trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
-    let token = current_user_token();
-    let path = translated_str(token, path);
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let all_data = app_inode.read_all();
-        let task = current_task().unwrap();
-        task.exec(all_data.as_slice());
-        0
-    } else {
-        -1
-    }
-}
-
-    */
 }
 
 /// YOUR JOB: Set task priority.

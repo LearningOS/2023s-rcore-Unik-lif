@@ -61,6 +61,7 @@ impl MemorySet {
         end_va: VirtAddr,
         permission: MapPermission,
     ) {
+        trace!("insert_framed_area");
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
@@ -204,6 +205,7 @@ impl MemorySet {
                 }
                 let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
                 max_end_vpn = map_area.vpn_range.get_end();
+                info!("elf");
                 memory_set.push(
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
@@ -216,6 +218,7 @@ impl MemorySet {
         // guard page
         user_stack_bottom += PAGE_SIZE;
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
+        info!("elf user_stack.");
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
@@ -226,6 +229,7 @@ impl MemorySet {
             None,
         );
         // used in sbrk
+        info!("elf user_stack_top.");
         memory_set.push(
             MapArea::new(
                 user_stack_top.into(),
@@ -236,6 +240,7 @@ impl MemorySet {
             None,
         );
         // map TrapContext
+        info!("elf trapContext.");
         memory_set.push(
             MapArea::new(
                 TRAP_CONTEXT_BASE.into(),
@@ -259,6 +264,7 @@ impl MemorySet {
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
+            info!("from_existed_user.");
             memory_set.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {

@@ -58,6 +58,45 @@ impl Inode {
         }
         None
     }
+    /// Lab4:
+    /// Find file number with the inode_id:ino under disk_inode
+    fn find_filenum_id(&self, ino: u64, disk_inode: &DiskInode) -> u32 {
+        // assert it is a directory
+        assert!(disk_inode.is_dir());
+        let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+        let mut dirent = DirEntry::empty();
+        let mut nlink = 0 as u32;
+        for i in 0..file_count {
+            assert_eq!(
+                disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device,),
+                DIRENT_SZ,
+            );
+            if dirent.inode_id() == ino as u32 {
+                nlink += 1;
+            }
+        }
+        nlink
+    }
+    /// Lab4:
+    /// Find the file using name and clear it.
+    fn clear_file(&self, name: &str, disk_inode: &mut DiskInode) -> isize {
+        // assert it is a directory
+        assert!(disk_inode.is_dir());
+        let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+        let mut dirent = DirEntry::empty();
+        let mut dirent_empty = DirEntry::empty();
+        for i in 0..file_count {
+            assert_eq!(
+                disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device,),
+                DIRENT_SZ,
+            );
+            if dirent.name() == name {
+                disk_inode.write_at(DIRENT_SZ * i, dirent_empty.as_bytes_mut(), &self.block_device);
+                return 0;
+            }
+        }
+        -1
+    }
     /// Find inode under current inode by name
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {
         let fs = self.fs.lock();
@@ -73,6 +112,44 @@ impl Inode {
             })
         })
     }
+    /// Lab4:
+    /// Search the inode.
+    pub fn search_file(&self, name: &str) -> Option<u64> {
+        if let Some(id) = self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(name, disk_inode)
+        }) {
+            Some(id as u64)
+        } else {
+            None
+        }
+    }
+    /// Lab4:
+    /// Clear a file dirent using name.
+    pub fn dirent_clear(&self, name: &str) -> isize {
+        self.modify_disk_inode(|disk_inode| {
+            self.clear_file(name, disk_inode)
+        })
+    }
+    /// Lab4:
+    /// return stat of the inode.
+    pub fn get_stat(&self) -> (u64, bool) {
+        let fs = self.fs.lock();
+        let ino = fs.get_inode_id(self.block_id as u32, self.block_offset) as u64;
+        // it seems in our OSInode, we don't take Directory into consideration, simply use the OSInode.
+        let file_or_dir = true;
+        //let fs = self.fs.lock();
+        //let nlink = fs.root_inode();//.find_by_ino(ino);
+        (ino, file_or_dir)
+    }
+
+    /// Lab4:
+    /// return number of file that has the inode_id of ino.
+    pub fn find_by_ino(&self, ino: u64) -> u32 {
+        self.read_disk_inode(|disk_inode| {
+            self.find_filenum_id(ino, disk_inode)
+        })
+    }
+
     /// Increase the size of a disk inode
     fn increase_size(
         &self,
@@ -138,6 +215,52 @@ impl Inode {
         )))
         // release efs lock automatically by compiler
     }
+
+    /// Lab4:
+    /// link inode by name
+    /// Used by ROOT_INODE.
+    pub fn add_link(&self, name: &str, new_name: &str) -> isize {
+        let mut fs = self.fs.lock();
+        if let Some(inode_id) = self.search_file(name) {
+            self.modify_disk_inode(|root_inode| {
+                // append file in the dirent
+                let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                let new_size = (file_count + 1) * DIRENT_SZ;
+                // increase size
+                self.increase_size(new_size as u32, root_inode, &mut fs);
+                // write dirent
+                let dirent = DirEntry::new(new_name, inode_id as u32);
+                root_inode.write_at(
+                    file_count * DIRENT_SZ,
+                    dirent.as_bytes(),
+                    &self.block_device,
+                );
+            });
+            block_cache_sync_all();
+            0
+        } else {
+            -1
+        }
+    }
+
+    /// Lab4:
+    /// unlink the file.
+    pub fn unlink(&self, name: &str) -> isize {
+        // first judge whether the file exists.
+        if let Some(inode_id) = self.search_file(name) {
+            // judge whether the nlink is 1. If it is 1, we should clear the inode.
+            if self.find_by_ino(inode_id) == 1 {
+                let inode = self.find(name).unwrap();
+                inode.clear();
+            }
+            // the file exists, clear the dirent
+            self.dirent_clear(name);
+            0
+        } else {
+            -1
+        }
+    }
+
     /// List inodes under current inode
     pub fn ls(&self) -> Vec<String> {
         let _fs = self.fs.lock();

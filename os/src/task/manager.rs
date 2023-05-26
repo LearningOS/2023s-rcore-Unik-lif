@@ -2,6 +2,7 @@
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
 use alloc::collections::VecDeque;
+
 use alloc::sync::Arc;
 use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
@@ -23,6 +24,8 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
+        // self.ready_queue.pop_front()
+        
         let mut min_stride = self.ready_queue.get(0).unwrap().get_stride();
         let mut pos = 0 as usize;
         for i in 0..self.ready_queue.len() {
@@ -33,6 +36,7 @@ impl TaskManager {
             }
         }
         self.ready_queue.remove(pos)
+        
     }
 }
 
