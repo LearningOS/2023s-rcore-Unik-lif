@@ -49,6 +49,19 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// Lab5: enable the deadlock detection.
+    pub dead_detect: bool,
+    /// Lab5: semaphore deadlock detection part.
+    /// I am a little afraid that my heap will overflow...
+    /// Lab5: available resources.
+    /// assume we at most have 10 threads and 10 kinds of semaphores.
+    pub available: Vec<usize>,
+    /// Lab5: allocation vector.
+    pub allocation: Vec<Vec<usize>>,
+    /// Lab5: need vector.
+    pub need: Vec<Vec<usize>>,
+    // the first element will be max tid number, and the second element will be max sem_id number.
+    pub matrix: (usize, usize),
 }
 
 impl ProcessControlBlockInner {
@@ -119,6 +132,12 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    // Lab5: detection.
+                    dead_detect: false,
+                    available: Vec::new(),
+                    allocation: Vec::new(),
+                    need: Vec::new(),
+                    matrix: (0, 0),
                 })
             },
         });
@@ -245,6 +264,12 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    // Lab5: detection.
+                    dead_detect: false,
+                    available: Vec::new(),
+                    allocation: Vec::new(),
+                    need: Vec::new(),
+                    matrix: (0, 0),
                 })
             },
         });

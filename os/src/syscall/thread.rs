@@ -4,6 +4,7 @@ use crate::{
     trap::{trap_handler, TrapContext},
 };
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 /// thread create syscall
 pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     trace!(
@@ -50,6 +51,28 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
         trap_handler as usize,
     );
     (*new_task_trap_cx).x[10] = arg;
+    if process_inner.dead_detect {
+        warn!("thread creates: tid:{}", new_task_tid);
+        // Lab5:
+        // allocation and need extending for the task_tid.
+        if new_task_tid >= process_inner.matrix.0 {
+            process_inner.matrix.0 = new_task_tid + 1;
+        }
+        let mut new_vec = Vec::<usize>::new();
+        for _ in 0..process_inner.matrix.1 {
+            new_vec.push(0);
+        }
+        if new_task_tid >= process_inner.allocation.len() {
+            for _ in process_inner.allocation.len()..(new_task_tid + 1) {
+                process_inner.allocation.push(new_vec.clone());
+            }
+        }
+        if new_task_tid >= process_inner.need.len() {
+            for _ in process_inner.need.len()..(new_task_tid + 1) {
+                process_inner.need.push(new_vec.clone());
+            }
+        }
+    }
     new_task_tid as isize
 }
 /// get current thread id syscall

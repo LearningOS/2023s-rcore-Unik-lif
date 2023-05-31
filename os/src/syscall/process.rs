@@ -6,6 +6,7 @@ use crate::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
     },
+    timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 
@@ -167,7 +168,21 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    let token = current_user_token();
+    // first get the time here.
+    let us = get_time_us();
+    let sec = us / 1_000_000;
+    let usec = us % 1_000_000;
+
+    let sec_va = _ts as usize;
+    let usec_va = _ts as usize + 8;
+    let sec_pa = translated_refmut(token, sec_va as *mut usize) as *mut usize;
+    let usec_pa = translated_refmut(token, usec_va  as *mut usize) as *mut usize;
+    unsafe {
+        *sec_pa = sec;
+        *usec_pa = usec;
+    }
+    0
 }
 
 /// task_info syscall
